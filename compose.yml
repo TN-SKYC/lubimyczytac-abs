@@ -5,4 +5,4 @@ services:
     container_name: lubimyczytac-abs
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3000:3000"

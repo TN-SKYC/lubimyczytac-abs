@@ -1,5 +1,6 @@
 # lubimyczytac-abs
-Audiobookshelf Custom Metadata Provider for LubimyCzytac
+Audiobookshelf Custom Metadata Provider for https://lubimyczytac.pl
+Docker hub page: https://hub.docker.com/r/lakafior/lubimyczytac-abs
 
 ## Screenshots
 
@@ -30,15 +31,27 @@ Audiobookshelf Custom Metadata Provider for LubimyCzytac
 # Instructions
 
 ## How to run
-1. Copy this repo:
+
+### Prerequisites:
+Docker and Docker Compose installed on your system
+
+### Setup and Running:
+1. Create or copy from girhub a compose.yml file in your desired directory with the following content.
 ```
-git clone https://github.com/lakafior/lubimyczytac-abs.git
+---
+services:
+  lubimyczytac-abs:
+    image: lakafior/lubimyczytac-abs:latest
+    container_name: lubimyczytac-abs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
 ```
-2. Move inside directory:
+2. Pull the latest Docker image:
 ```
-cd lubimyczytac-abs
+docker-compose pull
 ```
-3. Build Docker container using docker-compose:
+3. Start the application:
 ```
 docker-compose up -d
 ```
