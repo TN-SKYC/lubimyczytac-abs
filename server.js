@@ -3,13 +3,13 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const cors = require('cors');
 const stringSimilarity = require('string-similarity');
+const NodeCache = require('node-cache');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const cache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes
 
 app.use(cors());
-
-//let lastRequestTime = 0; // Variable to store the timestamp of the last request
 
 // Middleware to check for AUTHORIZATION header
 app.use((req, res, next) => {
@@ -17,8 +17,6 @@ app.use((req, res, next) => {
   if (!apiKey) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  // Here you would typically validate the API key
-  // For now, we'll just pass it through
   next();
 });
 
@@ -34,21 +32,12 @@ class LubimyCzytacProvider {
     return this.textDecoder.decode(new TextEncoder().encode(text));
   }
 
-  // Throttling function to ensure only one request every 10 seconds
-  // async throttle() {
-  //   const now = Date.now();
-  //   const delay = 10000; // 10 seconds
-
-  //   if (now - lastRequestTime < delay) {
-  //     const waitTime = delay - (now - lastRequestTime);
-  //     await new Promise(resolve => setTimeout(resolve, waitTime));
-  //   }
-
-  //   lastRequestTime = Date.now();
-  // }
-
   async searchBooks(query, author = '') {
-    //await this.throttle(); // Wait until we can make a new request
+    const cacheKey = `${query}-${author}`;
+    const cachedResult = cache.get(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
     try {
       const currentTime = new Date().toLocaleString("pl-PL", {
@@ -65,37 +54,32 @@ class LubimyCzytacProvider {
       console.log(`Input details: "${query}" by "${author}"`);
 
       if (!author && query.includes("-")) {
-        // If author is empty and we suspect author is in the query, get it from query
         author = query.split("-")[0].replace(/\./g, " ").trim();
       } else {
-        // If author is not empty get from author field
         author = author.split("-")[0].replace(/\./g, " ").trim();
       }
 
       console.log("Extracted author: ", author);
 
       let cleanedTitle = query;
-      // We want to clean only the titles that are not in quotation marks. 
-      // Usefull e.g. when we want to search for a specific string and skip all the cleaning.
       if (!/^".*"$/.test(cleanedTitle)) {
-        cleanedTitle = cleanedTitle.replace(/(\d+kbps)/g, '') // Remove bitrate
-          .replace(/\bVBR\b.*$/gi, '') // Remove VBR
-          .replace(/^[\w\s.-]+-\s*/g, '') // Remove author information
-          .replace(/czyt.*/gi, '') // Remove narrator information (all forms of 'czyt')
-          .replace(/.*-/, '') // Remove everything before the last hyphen
-          .replace(/.*?(T[\s.]?\d{1,3}).*?(.*)$/i, '$2') // Keep everything from the matched TXX onwards
-          .replace(/.*?(Tom[\s.]?\d{1,3}).*?(.*)$/i, '$2') // Keep everything from the matched TomXX onwards
-          .replace(/.*?\(\d{1,3}\)\s*/g, '') // Remove anything before (XX) if present
-          .replace(/\(.*?\)/g, '') // Remove anything within brackets
-          .replace(/\[.*?\]/g, '') // Remove anything within square brackets
-          .replace(/\(/g, ' ') // Replace opening brackets with spaces
-          .replace(/[^\p{L}\d]/gu, ' ') // Replace each non-letter and non-digit with a space, including Polish letters                                
-          .replace(/\./g, ' ') // Replace dots with spaces
-          .replace(/\s+/g, ' ') // Replace multiple spaces with a single space
+        cleanedTitle = cleanedTitle.replace(/(\d+kbps)/g, '')
+          .replace(/\bVBR\b.*$/gi, '')
+          .replace(/^[\w\s.-]+-\s*/g, '')
+          .replace(/czyt.*/gi, '')
+          .replace(/.*-/, '')
+          .replace(/.*?(T[\s.]?\d{1,3}).*?(.*)$/i, '$2')
+          .replace(/.*?(Tom[\s.]?\d{1,3}).*?(.*)$/i, '$2')
+          .replace(/.*?\(\d{1,3}\)\s*/g, '')
+          .replace(/\(.*?\)/g, '')
+          .replace(/\[.*?\]/g, '')
+          .replace(/\(/g, ' ')
+          .replace(/[^\p{L}\d]/gu, ' ')
+          .replace(/\./g, ' ')
+          .replace(/\s+/g, ' ')
           .replace(/superprodukcja/i, '')
           .trim();
       } else {
-        // Remove quotes only if they are at the start and end of the string
         cleanedTitle = cleanedTitle.replace(/^"(.*)"$/, '$1');
       }
 
@@ -134,7 +118,6 @@ class LubimyCzytacProvider {
 
         console.log('Title similarity: ', titleSimilarity, '. Author similarity: ', authorSimilarity);
 
-        // Sometimes we don't know the author.
         if (title && bookUrl && (authorSimilarity.some(similarity => parseFloat(similarity) > 0.3) || author == '')) {
           console.log('---------- The one above looks like a great match. ----------');
           matches.push({
@@ -153,7 +136,9 @@ class LubimyCzytacProvider {
 
       const fullMetadata = await Promise.all(matches.map(match => this.getFullMetadata(match)));
 
-      return { matches: fullMetadata };
+      const result = { matches: fullMetadata };
+      cache.set(cacheKey, result);
+      return result;
     } catch (error) {
       console.error('Error searching books:', error.message, error.stack);
       return { matches: [] };
@@ -209,14 +194,12 @@ class LubimyCzytacProvider {
       return fullMetadata;
     } catch (error) {
       console.error(`Error fetching full metadata for ${match.title}:`, error.message, error.stack);
-      // Return basic metadata if full metadata fetch fails
       return match;
     }
   }
 
   extractSeriesName(seriesElement) {
     if (!seriesElement) return null;
-    // Remove the "(tom x)" part
     return seriesElement.replace(/\s*\(tom \d+.*?\)\s*$/, '').trim();
   }
 
@@ -283,7 +266,6 @@ class LubimyCzytacProvider {
     const languageMap = {
       polski: 'pol',
       angielski: 'eng',
-      // Add more language mappings as needed
     };
     return languageMap[language.toLowerCase()] || language;
   }
@@ -310,14 +292,9 @@ app.get('/search', async (req, res) => {
 
     const results = await provider.searchBooks(query, author);
 
-    // Modified response formatting with null year handling
     const formattedResults = {
       matches: results.matches.map(book => {
-        // Get the year only if publishedDate exists and is valid
-        const year = book.publishedDate ? 
-          new Date(book.publishedDate).getFullYear() : null;
-        
-        // Only convert to string if year is not null
+        const year = book.publishedDate ? new Date(book.publishedDate).getFullYear() : null;
         const publishedYear = year ? year.toString() : undefined;
 
         return {
