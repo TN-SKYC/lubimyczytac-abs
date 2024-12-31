@@ -9,7 +9,7 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 
-let lastRequestTime = 0; // Variable to store the timestamp of the last request
+//let lastRequestTime = 0; // Variable to store the timestamp of the last request
 
 // Middleware to check for AUTHORIZATION header
 app.use((req, res, next) => {
@@ -35,20 +35,20 @@ class LubimyCzytacProvider {
   }
 
   // Throttling function to ensure only one request every 10 seconds
-  async throttle() {
-    const now = Date.now();
-    const delay = 10000; // 10 seconds
+  // async throttle() {
+  //   const now = Date.now();
+  //   const delay = 10000; // 10 seconds
 
-    if (now - lastRequestTime < delay) {
-      const waitTime = delay - (now - lastRequestTime);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
+  //   if (now - lastRequestTime < delay) {
+  //     const waitTime = delay - (now - lastRequestTime);
+  //     await new Promise(resolve => setTimeout(resolve, waitTime));
+  //   }
 
-    lastRequestTime = Date.now();
-  }
+  //   lastRequestTime = Date.now();
+  // }
 
   async searchBooks(query, author = '') {
-    await this.throttle(); // Wait until we can make a new request
+    //await this.throttle(); // Wait until we can make a new request
 
     try {
       const currentTime = new Date().toLocaleString("pl-PL", {
