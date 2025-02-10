@@ -155,13 +155,10 @@ class LubimyCzytacProvider {
       const publisher = $('dt:contains("Wydawnictwo:")').next('dd').find('a').text().trim() || '';
       const languages = $('dt:contains("Język:")').next('dd').text().trim().split(', ') || [];
       
-      // Check if the book has a description
-      let description = $('.collapse-content').text().trim();
+      // Extract description using the specific ID
+      let description = $('#book-description p').text().trim();
       if (!description || description === "Ta książka nie posiada jeszcze opisu.") {
         description = "Brak opisu."; // "No description available" in Polish
-      } else {
-        // If there's a description, use the HTML version
-        description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
       }
   
       const seriesElement = $('span.d-none.d-sm-block.mt-1:contains("Cykl:") a').text().trim();
@@ -254,7 +251,7 @@ class LubimyCzytacProvider {
   }
 
   enrichDescription(description, pages, publishedDate, translator) {
-    let enrichedDescription = this.stripHtmlTags(description);
+    let enrichedDescription = description;
   
     // Only add additional information if there's an actual description
     if (enrichedDescription !== "Brak opisu.") {
