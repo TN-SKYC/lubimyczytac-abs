@@ -246,19 +246,25 @@ class LubimyCzytacProvider {
 
   enrichDescription(description, pages, publishedDate, translator) {
     let enrichedDescription = this.stripHtmlTags(description);
-
-    if (pages) {
-      enrichedDescription += `\n\nKsiążka ma ${pages} stron.`;
+  
+    // Check if the description is empty or just says there's no description
+    if (!enrichedDescription || enrichedDescription.trim() === "Ta książka nie posiada jeszcze opisu.") {
+      enrichedDescription = " "; // "No description available" in Polish
+    } else {
+      // Only add additional information if there's an actual description
+      if (pages) {
+        enrichedDescription += `\n\nKsiążka ma ${pages} stron.`;
+      }
+  
+      if (publishedDate) {
+        enrichedDescription += `\n\nData pierwszego wydania: ${publishedDate.toLocaleDateString()}`;
+      }
+  
+      if (translator) {
+        enrichedDescription += `\n\nTłumacz: ${translator}`;
+      }
     }
-
-    if (publishedDate) {
-      enrichedDescription += `\n\nData pierwszego wydania: ${publishedDate.toLocaleDateString()}`;
-    }
-
-    if (translator) {
-      enrichedDescription += `\n\nTłumacz: ${translator}`;
-    }
-
+  
     return enrichedDescription;
   }
 
