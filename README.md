@@ -23,10 +23,7 @@ Docker hub page: https://hub.docker.com/r/lakafior/lubimyczytac-abs
 - Tags
 - Language
 - ISBN
-
-## Not fetching:
-- Lectors
-- Rectangle covers for audiobooks
+- Rectangle covers for audiobooks (if type: audiobook exsist for item)
 
 # Instructions
 
