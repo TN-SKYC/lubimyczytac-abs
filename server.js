@@ -150,11 +150,20 @@ class LubimyCzytacProvider {
       const response = await axios.get(match.url, { responseType: 'arraybuffer' });
       const decodedData = this.decodeText(response.data);
       const $ = cheerio.load(decodedData);
-
+  
       const cover = $('meta[property="og:image"]').attr('content') || '';
       const publisher = $('dt:contains("Wydawnictwo:")').next('dd').find('a').text().trim() || '';
       const languages = $('dt:contains("Język:")').next('dd').text().trim().split(', ') || [];
-      const description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
+      
+      // Check if the book has a description
+      let description = $('.collapse-content').text().trim();
+      if (!description || description === "Ta książka nie posiada jeszcze opisu.") {
+        description = "Brak opisu."; // "No description available" in Polish
+      } else {
+        // If there's a description, use the HTML version
+        description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
+      }
+  
       const seriesElement = $('span.d-none.d-sm-block.mt-1:contains("Cykl:") a').text().trim();
       const series = this.extractSeriesName(seriesElement);
       const seriesIndex = this.extractSeriesIndex(seriesElement);
@@ -162,7 +171,7 @@ class LubimyCzytacProvider {
       const tags = this.extractTags($);
       const rating = parseFloat($('meta[property="books:rating:value"]').attr('content')) / 2 || null;
       const isbn = $('meta[property="books:isbn"]').attr('content') || '';
-
+  
       let publishedDate, pages;
       try {
         publishedDate = this.extractPublishedDate($);
@@ -170,9 +179,9 @@ class LubimyCzytacProvider {
       } catch (error) {
         console.error('Error extracting published date or pages:', error.message);
       }
-
+  
       const translator = this.extractTranslator($);
-
+  
       const fullMetadata = {
         ...match,
         cover,
@@ -190,7 +199,7 @@ class LubimyCzytacProvider {
           lubimyczytac: match.id,
         },
       };
-
+  
       return fullMetadata;
     } catch (error) {
       console.error(`Error fetching full metadata for ${match.title}:`, error.message, error.stack);
@@ -247,11 +256,8 @@ class LubimyCzytacProvider {
   enrichDescription(description, pages, publishedDate, translator) {
     let enrichedDescription = this.stripHtmlTags(description);
   
-    // Check if the description is empty or just says there's no description
-    if (!enrichedDescription || enrichedDescription.trim() === "Ta książka nie posiada jeszcze opisu.") {
-      enrichedDescription = " "; // "No description available" in Polish
-    } else {
-      // Only add additional information if there's an actual description
+    // Only add additional information if there's an actual description
+    if (enrichedDescription !== "Brak opisu.") {
       if (pages) {
         enrichedDescription += `\n\nKsiążka ma ${pages} stron.`;
       }
