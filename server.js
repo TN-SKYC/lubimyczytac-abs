@@ -156,7 +156,7 @@ class LubimyCzytacProvider {
       const publisher = $('dt:contains("Wydawnictwo:")').next('dd').find('a').text().trim() || '';
       const languages = $('dt:contains("Język:")').next('dd').text().trim().split(', ') || [];
       const description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
-      const seriesElement = $('span.d-none.d-sm-block.mt-1:contains("Cykl:") a').text().trim();
+      const seriesElement = $('span.d-none.d-sm-block.mt-1:contains("Cykl:")').find('a').text().trim();
       const series = this.extractSeriesName(seriesElement);
       const seriesIndex = this.extractSeriesIndex(seriesElement);
       const genres = this.extractGenres($);
@@ -182,6 +182,7 @@ class LubimyCzytacProvider {
         publisher,
         publishedDate,
         rating,
+        series,
         seriesIndex,
         genres,
         tags,
