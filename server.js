@@ -101,7 +101,29 @@ class LubimyCzytacProvider {
       const booksMatches = this.parseSearchResults(booksResponse.data, 'book');
       const audiobooksMatches = this.parseSearchResults(audiobooksResponse.data, 'audiobook');
 
-      const allMatches = [...booksMatches, ...audiobooksMatches];
+      let allMatches = [...booksMatches, ...audiobooksMatches];
+
+      // Calculate similarity scores and sort the matches
+      allMatches = allMatches.map(match => {
+        const titleSimilarity = stringSimilarity.compareTwoStrings(match.title.toLowerCase(), cleanedTitle.toLowerCase());
+        
+        let combinedSimilarity;
+        if (author) {
+          const authorSimilarity = Math.max(...match.authors.map(a => 
+            stringSimilarity.compareTwoStrings(a.toLowerCase(), author.toLowerCase())
+          ));
+          // Combine title and author similarity scores if author is provided
+          combinedSimilarity = (titleSimilarity * 0.6) + (authorSimilarity * 0.4);
+        } else {
+          // Use only title similarity if no author is provided
+          combinedSimilarity = titleSimilarity;
+        }
+        
+        return { ...match, similarity: combinedSimilarity };
+      }).sort((a, b) => b.similarity - a.similarity);
+
+      // Limit the number of matches if needed
+      allMatches = allMatches.slice(0, 20); // Max 20 matches
 
       const fullMetadata = await Promise.all(allMatches.map(match => this.getFullMetadata(match)));
 
@@ -161,7 +183,7 @@ class LubimyCzytacProvider {
       const seriesIndex = this.extractSeriesIndex(seriesElement);
       const genres = this.extractGenres($);
       const tags = this.extractTags($);
-      const rating = parseFloat($('meta[property="books:ratingvalue"]').attr('content')) / 2|| null;
+      const rating = parseFloat($('meta[property="books:rating:value"]').attr('content')) / 2 || null;
       const isbn = $('meta[property="books:isbn"]').attr('content') || '';
 
       let publishedDate, pages;
@@ -321,7 +343,8 @@ app.get('/search', async (req, res) => {
           }] : undefined,
           language: book.languages && book.languages.length > 0 ? book.languages[0] : undefined,
           duration: book.duration || undefined,
-          type: book.type // Add this line to include the type (book or audiobook)
+          type: book.type,
+          similarity: book.similarity
         };
       })
     };
