@@ -120,10 +120,17 @@ class LubimyCzytacProvider {
         }
         
         return { ...match, similarity: combinedSimilarity };
-      }).sort((a, b) => b.similarity - a.similarity);
+      }).sort((a, b) => {
+        // Primary sort: by similarity (descending)
+        if (b.similarity !== a.similarity) {
+          return b.similarity - a.similarity;
+        }
 
-      // Limit the number of matches if needed
-      allMatches = allMatches.slice(0, 20); // Max 20 matches
+        // Secondary sort: prioritize audiobooks if similarity is equal
+        const typeValueA = a.type === 'audiobook' ? 1 : 0;
+        const typeValueB = b.type === 'audiobook' ? 1 : 0;
+        return typeValueB - typeValueA;
+      }).slice(0, 20); // Max 20 matches
 
       const fullMetadata = await Promise.all(allMatches.map(match => this.getFullMetadata(match)));
 
@@ -134,38 +141,6 @@ class LubimyCzytacProvider {
       console.error('Error searching books:', error.message, error.stack);
       return { matches: [] };
     }
-  }
-
-  parseSearchResults(responseData, type) {
-    const decodedData = this.decodeText(responseData);
-    const $ = cheerio.load(decodedData);
-    const matches = [];
-
-    $('.authorAllBooks__single').each((index, element) => {
-      const $book = $(element);
-      const $bookInfo = $book.find('.authorAllBooks__singleText');
-
-      const title = $bookInfo.find('.authorAllBooks__singleTextTitle').text().trim();
-      const bookUrl = $bookInfo.find('.authorAllBooks__singleTextTitle').attr('href');
-      const authors = $bookInfo.find('a[href*="/autor/"]').map((i, el) => $(el).text().trim()).get();
-
-      if (title && bookUrl) {
-        matches.push({
-          id: bookUrl.split('/').pop(),
-          title: this.decodeUnicode(title),
-          authors: authors.map(author => this.decodeUnicode(author)),
-          url: `${this.baseUrl}${bookUrl}`,
-          type: type,
-          source: {
-            id: this.id,
-            description: this.name,
-            link: this.baseUrl,
-          },
-        });
-      }
-    });
-
-    return matches;
   }
 
   async getFullMetadata(match) {
