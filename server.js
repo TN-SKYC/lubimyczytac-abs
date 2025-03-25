@@ -106,10 +106,10 @@ class LubimyCzytacProvider {
       // Calculate similarity scores and sort the matches
       allMatches = allMatches.map(match => {
         const titleSimilarity = stringSimilarity.compareTwoStrings(match.title.toLowerCase(), cleanedTitle.toLowerCase());
-        
+
         let combinedSimilarity;
         if (author) {
-          const authorSimilarity = Math.max(...match.authors.map(a => 
+          const authorSimilarity = Math.max(...match.authors.map(a =>
             stringSimilarity.compareTwoStrings(a.toLowerCase(), author.toLowerCase())
           ));
           // Combine title and author similarity scores if author is provided
@@ -118,7 +118,7 @@ class LubimyCzytacProvider {
           // Use only title similarity if no author is provided
           combinedSimilarity = titleSimilarity;
         }
-        
+
         return { ...match, similarity: combinedSimilarity };
       }).sort((a, b) => {
         // Primary sort: by similarity (descending)
@@ -141,6 +141,39 @@ class LubimyCzytacProvider {
       console.error('Error searching books:', error.message, error.stack);
       return { matches: [] };
     }
+  }
+
+// ADDED THIS FUNCTION BACK:
+  parseSearchResults(responseData, type) {
+    const decodedData = this.decodeText(responseData);
+    const $ = cheerio.load(decodedData);
+    const matches = [];
+
+    $('.authorAllBooks__single').each((index, element) => {
+      const $book = $(element);
+      const $bookInfo = $book.find('.authorAllBooks__singleText');
+
+      const title = $bookInfo.find('.authorAllBooks__singleTextTitle').text().trim();
+      const bookUrl = $bookInfo.find('.authorAllBooks__singleTextTitle').attr('href');
+      const authors = $bookInfo.find('a[href*="/autor/"]').map((i, el) => $(el).text().trim()).get();
+
+      if (title && bookUrl) {
+        matches.push({
+          id: bookUrl.split('/').pop(),
+          title: this.decodeUnicode(title),
+          authors: authors.map(author => this.decodeUnicode(author)),
+          url: `${this.baseUrl}${bookUrl}`,
+          type: type,
+          source: {
+            id: this.id,
+            description: this.name,
+            link: this.baseUrl,
+          },
+        });
+      }
+    });
+
+    return matches;
   }
 
   async getFullMetadata(match) {
