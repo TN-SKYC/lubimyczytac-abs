@@ -168,10 +168,10 @@ class LubimyCzytacProvider {
           .replace(/.*-/, '')
           .replace(/.*?(T[\s.]?\d{1,3}).*?(.*)$/i, '$2')
           .replace(/.*?(Tom[\s.]?\d{1,3}).*?(.*)$/i, '$2')
-          .replace(/.*?KATEX_INLINE_OPEN\d{1,3}KATEX_INLINE_CLOSE\s*/g, '')
-          .replace(/KATEX_INLINE_OPEN.*?KATEX_INLINE_CLOSE/g, '')
-          .replace(/```math.*?```/g, '')
-          .replace(/KATEX_INLINE_OPEN/g, ' ')
+          .replace(/.*?\(\d{1,3}\)\s*/g, '')
+          .replace(/\(.*?\)/g, '')
+          .replace(/\[.*?\]/g, '')
+          .replace(/\(/g, ' ')
           .replace(/[^\p{L}\d]/gu, ' ')
           .replace(/\./g, ' ')
           .replace(/\s+/g, ' ')
@@ -203,17 +203,13 @@ class LubimyCzytacProvider {
 
       // Calculate similarity scores and sort the matches
       allMatches = allMatches.map(match => {
-        const titleSimilarity = stringSimilarity.compareTwoStrings(
-          (match.title || '').toLowerCase(),
-          cleanedTitle.toLowerCase()
-        );
+        const titleSimilarity = stringSimilarity.compareTwoStrings(match.title.toLowerCase(), cleanedTitle.toLowerCase());
 
         let combinedSimilarity;
         if (author) {
-          const sims = (match.authors || []).map(a =>
-            stringSimilarity.compareTwoStrings((a || '').toLowerCase(), author.toLowerCase())
-          );
-          const authorSimilarity = sims.length ? Math.max(...sims) : 0;
+          const authorSimilarity = Math.max(...match.authors.map(a =>
+            stringSimilarity.compareTwoStrings(a.toLowerCase(), author.toLowerCase())
+          ));
           // Combine title and author similarity scores if author is provided
           combinedSimilarity = (titleSimilarity * 0.6) + (authorSimilarity * 0.4);
         } else {
@@ -245,7 +241,7 @@ class LubimyCzytacProvider {
     }
   }
 
-  // UPDATED: broader author extraction to handle audiobook tiles too
+// ADDED THIS FUNCTION BACK:
   parseSearchResults(responseData, type) {
     const decodedData = this.decodeText(responseData);
     const $ = cheerio.load(decodedData);
@@ -257,16 +253,13 @@ class LubimyCzytacProvider {
 
       const title = $bookInfo.find('.authorAllBooks__singleTextTitle').text().trim();
       const bookUrl = $bookInfo.find('.authorAllBooks__singleTextTitle').attr('href');
-
-      // Authors: search across the whole tile to also catch audiobook listings
-      let authors = $book.find('a[href*="/autor/"]').map((i, el) => $(el).text().trim()).get();
-      authors = authors.filter(Boolean).map(author => this.decodeUnicode(author));
+      const authors = $bookInfo.find('a[href*="/autor/"]').map((i, el) => $(el).text().trim()).get();
 
       if (title && bookUrl) {
         matches.push({
           id: bookUrl.split('/').pop(),
           title: this.decodeUnicode(title),
-          authors,
+          authors: authors.map(author => this.decodeUnicode(author)),
           url: `${this.baseUrl}${bookUrl}`,
           type: type,
           source: {
@@ -281,26 +274,6 @@ class LubimyCzytacProvider {
     return matches;
   }
 
-  // NEW: robust extraction of published year (works with multiple labels and Polish text)
-  extractPublishedYear($) {
-    const getNextText = (dtSel) => $(dtSel).first().next('dd').text().trim();
-
-    const candidates = [
-      getNextText('dt[title*="Data pierwszego wydania"]'),
-      getNextText('dt:contains("Data pierwszego wydania")'),
-      getNextText('dt:contains("Data wydania")'),
-      getNextText('dt:contains("Data premiery")'),
-      getNextText('dt:contains("Rok wydania")'),
-    ].filter(Boolean);
-
-    if (!candidates.length) return null;
-
-    // Extract a 4-digit year
-    const txt = candidates[0];
-    const m = txt.match(/\b(1[89]\d{2}|20\d{2}|21\d{2})\b/);
-    return m ? parseInt(m[1], 10) : null;
-  }
-
   async getFullMetadata(match) {
     try {
       const response = await axios.get(match.url, { responseType: 'arraybuffer' });
@@ -309,10 +282,7 @@ class LubimyCzytacProvider {
 
       const cover = $('meta[property="og:image"]').attr('content') || '';
       const publisher = $('dt:contains("Wydawnictwo:")').next('dd').find('a').text().trim() || '';
-
-      const langText = $('dt:contains("Język:")').next('dd').text().trim();
-      const languages = langText ? langText.split(',').map(s => s.trim()).filter(Boolean) : [];
-
+      const languages = $('dt:contains("Język:")').next('dd').text().trim().split(', ') || [];
       const description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
       const seriesElement = $('span.d-none.d-sm-block.mt-1:contains("Cykl:")').find('a').text().trim();
       const series = this.extractSeriesName(seriesElement);
@@ -322,42 +292,23 @@ class LubimyCzytacProvider {
       const rating = parseFloat($('meta[property="books:rating:value"]').attr('content')) / 2 || null;
       const isbn = $('meta[property="books:isbn"]').attr('content') || '';
 
-      // Authors fallback from detail page if not present in search results
-      let authors = Array.isArray(match.authors) ? match.authors : [];
-      if (!authors.length) {
-        authors = $('a[href*="/autor/"]').map((i, el) => $(el).text().trim()).get().filter(Boolean);
-        authors = authors.map(a => this.decodeUnicode(a));
-      }
-
-      let publishedYear = null;
-      let pages = null;
+      let publishedDate, pages;
       try {
-        publishedYear = this.extractPublishedYear($); // number or null
-        // Fallback to original method if year not found (may be unreliable with Polish text)
-        if (!publishedYear) {
-          const dt = this.extractPublishedDate($);
-          if (dt instanceof Date && !isNaN(dt)) {
-            publishedYear = dt.getFullYear();
-          }
-        }
+        publishedDate = this.extractPublishedDate($);
         pages = this.extractPages($);
       } catch (error) {
-        console.error('Error extracting published year or pages:', error.message);
+        console.error('Error extracting published date or pages:', error.message);
       }
 
       const translator = this.extractTranslator($);
 
-      const publishedDate = publishedYear ? new Date(publishedYear, 0, 1) : null;
-
       const fullMetadata = {
         ...match,
-        authors,
         cover,
         description: this.enrichDescription(description, pages, publishedDate, translator),
         languages: languages.map(lang => this.getLanguageName(lang)),
         publisher,
         publishedDate,
-        publishedYear: publishedYear ? String(publishedYear) : undefined,
         rating,
         series,
         seriesIndex,
@@ -372,22 +323,18 @@ class LubimyCzytacProvider {
       return fullMetadata;
     } catch (error) {
       console.error(`Error fetching full metadata for ${match.title}:`, error.message, error.stack);
-      return {
-        ...match,
-        publishedDate: null,
-        publishedYear: undefined,
-      };
+      return match;
     }
   }
 
   extractSeriesName(seriesElement) {
     if (!seriesElement) return null;
-    return seriesElement.replace(/\s*KATEX_INLINE_OPENtom \d+.*?KATEX_INLINE_CLOSE\s*$/, '').trim();
+    return seriesElement.replace(/\s*\(tom \d+.*?\)\s*$/, '').trim();
   }
 
   extractSeriesIndex(seriesElement) {
     if (!seriesElement) return null;
-    const match = seriesElement.match(/KATEX_INLINE_OPENtom (\d+)/);
+    const match = seriesElement.match(/\(tom (\d+)/);
     return match ? parseInt(match[1]) : null;
   }
 
@@ -480,17 +427,13 @@ app.get('/search', async (req, res) => {
 
     const formattedResults = {
       matches: results.matches.map(book => {
-        // Prefer explicit publishedYear if present; fallback to Date if present
-        const y = book.publishedYear ??
-          (book.publishedDate instanceof Date && !isNaN(book.publishedDate) ? book.publishedDate.getFullYear() : undefined);
-        const publishedYear = y ? String(y) : undefined;
-
-        const authorStr = Array.isArray(book.authors) && book.authors.length ? book.authors.join(', ') : undefined;
+        const year = book.publishedDate ? new Date(book.publishedDate).getFullYear() : null;
+        const publishedYear = year ? year.toString() : undefined;
 
         return {
           title: book.title,
           subtitle: book.subtitle || undefined,
-          author: authorStr,
+          author: book.authors.join(', '),
           narrator: book.narrator || undefined,
           publisher: book.publisher || undefined,
           publishedYear: publishedYear,
