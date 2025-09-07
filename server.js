@@ -1,5 +1,103 @@
 const express = require('express');
 const axios = require('axios');
+
+// Throttle mechanism is present. HTTP error code 429 (too many requests) is thrown. 
+// Trying a workaround. 
+// --- 429-aware axios interceptors (reactive only) ---
+const penaltyUntil = new Map(); // origin -> unix ms
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function parseRetryAfterMs(ra) {
+  if (!ra) return null;
+  const num = Number(ra);
+  if (!Number.isNaN(num)) return Math.max(0, num * 1000);
+  const dateMs = Date.parse(ra);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return null;
+}
+
+function originFromConfig(config) {
+  try {
+    let url = config.url || '';
+    if (config.baseURL && !/^https?:\/\//i.test(url)) {
+      url = new URL(url, config.baseURL).toString();
+    }
+    return new URL(url).origin;
+  } catch {
+    return 'global';
+  }
+}
+
+async function waitForPenalty(key, jitterMs) {
+  const now = Date.now();
+  const until = penaltyUntil.get(key) || 0;
+  if (until > now) {
+    const wait = until - now + Math.floor(Math.random() * jitterMs);
+    await sleep(wait);
+  }
+}
+
+function setPenalty(key, delayMs) {
+  const now = Date.now();
+  const newUntil = now + delayMs;
+  const prev = penaltyUntil.get(key) || 0;
+  // extend, don't shorten
+  penaltyUntil.set(key, Math.max(prev, newUntil));
+}
+
+function attachRetryOn429(instance, {
+  maxRetries = 5,
+  fallbackDelayMs = 10_000,
+  maxDelayMs = 120_000,
+  jitterMs = 500,
+  log = (..._args) => {} // e.g., (msg) => console.log('[rate-limit]', msg)
+} = {}) {
+  instance.interceptors.request.use(async (config) => {
+    const key = originFromConfig(config);
+    await waitForPenalty(key, jitterMs);
+    return config;
+  });
+
+  instance.interceptors.response.use(
+    (res) => res,
+    async (err) => {
+      const res = err.response;
+      const cfg = err.config;
+      if (!cfg || !res || res.status !== 429) throw err;
+
+      cfg._retryCount = (cfg._retryCount || 0) + 1;
+      if (cfg._retryCount > maxRetries) {
+        log(`429 retry exhausted after ${maxRetries} attempts for ${cfg.url}`);
+        throw err;
+      }
+
+      const key = originFromConfig(cfg);
+      let delay = parseRetryAfterMs(res.headers?.['retry-after']);
+      if (delay == null) {
+        // escalate on repeated 429s, but still start at 10s fallback
+        delay = Math.min(maxDelayMs, fallbackDelayMs * 2 ** (cfg._retryCount - 1));
+      }
+      delay += Math.floor(Math.random() * jitterMs);
+
+      setPenalty(key, delay);
+      log(`429 -> backing off ${Math.round(delay)}ms (attempt ${cfg._retryCount}) for ${key} ${cfg.url}`);
+      await sleep(delay);
+
+      return instance.request(cfg);
+    }
+  );
+}
+
+attachRetryOn429(axios, {
+  fallbackDelayMs: 10_000,
+  maxRetries: 5,
+  jitterMs: 400,
+  maxDelayMs: 60_000,
+  log: (...args) => console.log('[429]', ...args)
+});
+// --- end 429-aware interceptors ---
+
 const cheerio = require('cheerio');
 const cors = require('cors');
 const stringSimilarity = require('string-similarity');
