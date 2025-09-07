@@ -429,11 +429,13 @@ app.get('/search', async (req, res) => {
       matches: results.matches.map(book => {
         const year = book.publishedDate ? new Date(book.publishedDate).getFullYear() : null;
         const publishedYear = year ? year.toString() : undefined;
+        const authorsArr = book.authors && book.authors.length ? book.authors.map(a => a.replace(/\s+/g, ' ').trim()).filter(Boolean) : undefined;
 
         return {
           title: book.title,
           subtitle: book.subtitle || undefined,
-          author: book.authors.join(', '),
+          author: authorsArr ? authorsArr.join(', ') : undefined,
+          authors: authorsArr,
           narrator: book.narrator || undefined,
           publisher: book.publisher || undefined,
           publishedYear: publishedYear,
