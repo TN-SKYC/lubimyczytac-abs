@@ -59,6 +59,6 @@ docker-compose up -d
 3. Navigate to Custom Metadata Providers
 4. Click on Add
 5. Name: whatever for example LubimyCzytac
-6. URL: http://your-ip:3000
-7. Authorization Header Value: whatever, but not blank, for example 00000
-8. Save
+6. URL: http://your-ip:3000 or hostname, eg http://lubimyczytac-abs:3000 without trailing slash
+8. Authorization Header Value: whatever, but not blank, for example 00000
+9. Save
