@@ -20,6 +20,31 @@ app.use((req, res, next) => {
   next();
 });
 
+// A workaround for error 429 (throttling)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const { config, response } = error;
+    
+    if (response?.status === 429) {
+      config._retryCount = (config._retryCount || 0) + 1;
+      
+      if (config._retryCount <= 5) {
+        const delayMs = 10000 + Math.floor(Math.random() * 10000);
+        console.log(`[429] Retry ${config._retryCount}/5 after ${Math.round(delayMs/1000)}s`);
+        await sleep(delayMs);
+        return axios.request(config);
+      }
+
+      console.error(`[429] Max retries exceeded for ${config.url}`);
+    }
+    
+    throw error;
+  }
+);
+// The 429 worakround ends here
+
 class LubimyCzytacProvider {
   constructor() {
     this.id = 'lubimyczytac';
