@@ -390,7 +390,7 @@ app.get('/search', async (req, res) => {
           publishedYear: publishedYear,
           description: book.description || undefined,
           cover: book.cover || undefined,
-          isbn: book.identifiers?.isbn || undefined,
+          isbn: book.identifiers?.isbn || (book.similarity >= 0.95 ? '0' : undefined), // '0' indicates missing ISBN with high similarity
           asin: book.identifiers?.asin || undefined,
           genres: book.genres || undefined,
           tags: book.tags || undefined,
