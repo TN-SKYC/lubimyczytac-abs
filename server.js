@@ -182,7 +182,10 @@ class LubimyCzytacProvider {
       const decodedData = this.decodeText(response.data);
       const $ = cheerio.load(decodedData);
 
-      const cover = $('meta[property="og:image"]').attr('content') || '';
+      const cover = $('.book-cover a').attr('data-cover') ||
+              $('.book-cover source').attr('srcset') ||
+              $('.book-cover img').attr('src') ||
+              $('meta[property="og:image"]').attr('content') || '';
       const publisher = $('dt:contains("Wydawnictwo:")').next('dd').find('a').text().trim() || '';
       const languages = $('dt:contains("Język:")').next('dd').text().trim().split(', ') || [];
       const description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
