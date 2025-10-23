@@ -134,7 +134,28 @@ class LubimyCzytacProvider {
 
       const fullMetadata = await Promise.all(allMatches.map(match => this.getFullMetadata(match)));
 
-      const result = { matches: fullMetadata };
+      const adjustedMetadata = fullMetadata.map(match => {
+        let adjustedSimilarity = match.similarity;
+        
+        // Penalty for missing ISBN
+        if (!match.identifiers?.isbn || match.identifiers.isbn === '') {
+          const originalSimilarity = adjustedSimilarity;
+          adjustedSimilarity *= 0.99;
+        }
+        
+        return { ...match, similarity: adjustedSimilarity };
+      }).sort((a, b) => {
+        // Primary sort: by similarity (descending)
+        if (b.similarity !== a.similarity) {
+          return b.similarity - a.similarity;
+        }
+        // Secondary sort: prioritize audiobooks if similarity is equal
+        const typeValueA = a.type === 'audiobook' ? 1 : 0;
+        const typeValueB = b.type === 'audiobook' ? 1 : 0;
+        return typeValueB - typeValueA;
+      });      
+
+      const result = { matches: adjustedMetadata };
       cache.set(cacheKey, result);
       return result;
     } catch (error) {
