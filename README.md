@@ -1,3 +1,10 @@
+Improvements over the original version:
+- additional sources for book cover
+- books without ISBN get a similarity penalty
+- error 429 (throttling) is handled
+- for books that have similarity >=0,95 and don't have ISBN, fake ISBN=0 is added (option useful when combined with "Skip matching books that already have an ISBN" option in ABS)
+
+
 # lubimyczytac-abs
 Audiobookshelf Custom Metadata Provider for https://lubimyczytac.pl
 Docker hub page: https://hub.docker.com/r/lakafior/lubimyczytac-abs

@@ -20,6 +20,31 @@ app.use((req, res, next) => {
   next();
 });
 
+// A workaround for error 429 (throttling)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const { config, response } = error;
+    
+    if (response?.status === 429) {
+      config._retryCount = (config._retryCount || 0) + 1;
+      
+      if (config._retryCount <= 5) {
+        const delayMs = 10000 + Math.floor(Math.random() * 10000);
+        console.log(`[429] Retry ${config._retryCount}/5 after ${Math.round(delayMs/1000)}s`);
+        await sleep(delayMs);
+        return axios.request(config);
+      }
+
+      console.error(`[429] Max retries exceeded for ${config.url}`);
+    }
+    
+    throw error;
+  }
+);
+// The 429 worakround ends here
+
 class LubimyCzytacProvider {
   constructor() {
     this.id = 'lubimyczytac';
@@ -134,7 +159,28 @@ class LubimyCzytacProvider {
 
       const fullMetadata = await Promise.all(allMatches.map(match => this.getFullMetadata(match)));
 
-      const result = { matches: fullMetadata };
+      const adjustedMetadata = fullMetadata.map(match => {
+        let adjustedSimilarity = match.similarity;
+        
+        // Penalty for missing ISBN
+        if (!match.identifiers?.isbn || match.identifiers.isbn === '') {
+          const originalSimilarity = adjustedSimilarity;
+          adjustedSimilarity *= 0.99;
+        }
+        
+        return { ...match, similarity: adjustedSimilarity };
+      }).sort((a, b) => {
+        // Primary sort: by similarity (descending)
+        if (b.similarity !== a.similarity) {
+          return b.similarity - a.similarity;
+        }
+        // Secondary sort: prioritize audiobooks if similarity is equal
+        const typeValueA = a.type === 'audiobook' ? 1 : 0;
+        const typeValueB = b.type === 'audiobook' ? 1 : 0;
+        return typeValueB - typeValueA;
+      });      
+
+      const result = { matches: adjustedMetadata };
       cache.set(cacheKey, result);
       return result;
     } catch (error) {
@@ -182,7 +228,10 @@ class LubimyCzytacProvider {
       const decodedData = this.decodeText(response.data);
       const $ = cheerio.load(decodedData);
 
-      const cover = $('meta[property="og:image"]').attr('content') || '';
+      const cover = $('.book-cover a').attr('data-cover') ||
+              $('.book-cover source').attr('srcset') ||
+              $('.book-cover img').attr('src') ||
+              $('meta[property="og:image"]').attr('content') || '';
       const publisher = $('dt:contains("Wydawnictwo:")').next('dd').find('a').text().trim() || '';
       const languages = $('dt:contains("Język:")').next('dd').text().trim().split(', ') || [];
       const description = $('.collapse-content').html() || $('meta[property="og:description"]').attr('content') || '';
@@ -341,7 +390,7 @@ app.get('/search', async (req, res) => {
           publishedYear: publishedYear,
           description: book.description || undefined,
           cover: book.cover || undefined,
-          isbn: book.identifiers?.isbn || undefined,
+          isbn: book.identifiers?.isbn || (book.similarity >= 0.95 ? '0' : undefined), // '0' indicates missing ISBN with high similarity
           asin: book.identifiers?.asin || undefined,
           genres: book.genres || undefined,
           tags: book.tags || undefined,
