@@ -43,7 +43,7 @@ axios.interceptors.response.use(
     throw error;
   }
 );
-// The 429 worakround ends here
+// The 429 workaround ends here
 
 class LubimyCzytacProvider {
   constructor() {
@@ -86,30 +86,74 @@ class LubimyCzytacProvider {
 
       console.log("Extracted author: ", author);
 
+      // let cleanedTitle = query;
+      // if (!/^".*"$/.test(cleanedTitle)) {
+      //   cleanedTitle = cleanedTitle.replace(/(\d+kbps)/g, '')
+      //     .replace(/\bVBR\b.*$/gi, '')
+      //     .replace(/^[\w\s.-]+-\s*/g, '')
+      //     .replace(/czyt.*/gi, '')
+      //     .replace(/.*-/, '')
+      //     .replace(/.*?(T[\s.]?\d{1,3}).*?(.*)$/i, '$2')
+      //     .replace(/.*?(Tom[\s.]?\d{1,3}).*?(.*)$/i, '$2')
+      //     .replace(/.*?\(\d{1,3}\)\s*/g, '')
+      //     .replace(/\(.*?\)/g, '')
+      //     .replace(/\[.*?\]/g, '')
+      //     .replace(/\(/g, ' ')
+      //     .replace(/[^\p{L}\d]/gu, ' ')
+      //     .replace(/\./g, ' ')
+      //     .replace(/\s+/g, ' ')
+      //     .replace(/superprodukcja/i, '')
+      //     .trim();
+      // } else {
+      //   cleanedTitle = cleanedTitle.replace(/^"(.*)"$/, '$1');
+      // }
+
+      // console.log("Extracted title: ", cleanedTitle);
+
+
+
       let cleanedTitle = query;
       if (!/^".*"$/.test(cleanedTitle)) {
-        cleanedTitle = cleanedTitle.replace(/(\d+kbps)/g, '')
+        // Step 1: Remove metadata (bitrate, narrator, etc.) - BEFORE checking Tom position
+        cleanedTitle = cleanedTitle
+          .replace(/\d+kbps/gi, '')
           .replace(/\bVBR\b.*$/gi, '')
-          .replace(/^[\w\s.-]+-\s*/g, '')
-          .replace(/czyt.*/gi, '')
-          .replace(/.*-/, '')
-          .replace(/.*?(T[\s.]?\d{1,3}).*?(.*)$/i, '$2')
-          .replace(/.*?(Tom[\s.]?\d{1,3}).*?(.*)$/i, '$2')
-          .replace(/.*?\(\d{1,3}\)\s*/g, '')
+          .replace(/\(?\s*czyt[^)]*\)?/gi, '')  // Remove narrator (czyt., czyta, etc.)
+          .replace(/superprodukcja/gi, '')
+          .replace(/^[\w\s.-]+-\s*/g, '')  // Remove author prefix
+          .replace(/.*-/, '');  // Keep only after last dash
+        
+        // Step 2: Handle Tom XX pattern
+        // Check if Tom XX is at the end (possibly with brackets/parens)
+        if (/[\(\[]?\s*T(?:om)?[\s.]?\d{1,3}\s*[\)\]]?\s*$/i.test(cleanedTitle)) {
+          // Tom is at end - keep it as part of title
+        } else {
+          // Tom is in middle - extract everything after it
+          cleanedTitle = cleanedTitle.replace(/^.*?[\(\[]?\s*T(?:om)?[\s.]?\d{1,3}\s*[\)\]]?\s+/i, '');
+        }
+        
+        // Step 3: Final cleanup
+        cleanedTitle = cleanedTitle
+          .replace(/^\(\d{1,3}\)\s*/g, '')
           .replace(/\(.*?\)/g, '')
           .replace(/\[.*?\]/g, '')
-          .replace(/\(/g, ' ')
           .replace(/[^\p{L}\d]/gu, ' ')
-          .replace(/\./g, ' ')
           .replace(/\s+/g, ' ')
-          .replace(/superprodukcja/i, '')
           .trim();
       } else {
         cleanedTitle = cleanedTitle.replace(/^"(.*)"$/, '$1');
       }
 
-      console.log("Extracted title: ", cleanedTitle);
+      console.log("Extracted title: ", cleanedTitle);      
 
+
+
+
+
+
+
+
+      
       let booksSearchUrl = `${this.baseUrl}/szukaj/ksiazki?phrase=${encodeURIComponent(cleanedTitle)}`;
       let audiobooksSearchUrl = `${this.baseUrl}/szukaj/audiobooki?phrase=${encodeURIComponent(cleanedTitle)}`;
       if (author) {
