@@ -124,7 +124,7 @@ class LubimyCzytacProvider {
           .replace(/.*-/, '');  // Keep only after last dash
         
         // Step 2: Handle Tom XX pattern
-        // Check if Tom XX is at the end (possibly with brackets/parens)
+        // Check if Tom XX is at the end (possibly with brackets)
         if (/[\(\[]?\s*T(?:om)?[\s.]?\d{1,3}\s*[\)\]]?\s*$/i.test(cleanedTitle)) {
           // Tom is at end - keep it as part of title
         } else {
